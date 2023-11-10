@@ -17,32 +17,33 @@ const router = express.Router();
 
 
 //회원가입 API
-router.post("/users", async (req, res) => {
-  const { nickname, email, password, confirmPassword } = req.body;
+const { Op } = require("sequelize");
+const { User } = require("./models");
 
-  //패스워드와 패스워드 확인 값이 일치하는지 확인
+router.post("/users", async (req, res) => {
+  const { email, nickname, password, confirmPassword } = req.body;
+
   if (password !== confirmPassword) {
     res.status(400).send({
       errorMessage: "패스워드가 패스워드 확인란과 다릅니다.",
     });
-    //코드 실행을 멈춰준다
     return;
   }
 
-  //닉네임이나 이메일이 동일한게 이미 있는지 확인하기 위해 가져온다
-  const existsUsers = await User.findOne({
-    $or: [{ nickname }, { email }],
+  // email or nickname이 동일한게 이미 있는지 확인하기 위해 가져온다.
+  const existsUsers = await User.findAll({
+    where: {
+      [Op.or]: [{ email }, { nickname }],
+    },
   });
-  if (existsUsers) {
+  if (existsUsers.length) {
     res.status(400).send({
-      errorMessage: "닉네임 또는 이메일이 이미 사용중입니다.",
+      errorMessage: "이메일 또는 닉네임이 이미 사용중입니다.",
     });
     return;
   }
 
-  const user = new User({ nickname, email, password });
-  await user.save();
-
+  await User.create({ email, nickname, password });
   res.status(201).send({});
 });
 
@@ -50,19 +51,20 @@ router.post("/users", async (req, res) => {
 //로그인 API
 router.post("/auth", async (req, res) => {
   const { email, password } = req.body;
-  
-  //해당하는 사용자의 이메일이 존재하는지 찾기
-  const user = await User.findOne({ email });
 
-  //해당 사용자가 존재하지 않거나 이메일,패스워드가 틀렸을 경우
+  const user = await User.findOne({
+    where: {
+      email,
+    },
+  });
+
   if (!user || password !== user.password) {
     res.status(400).send({
-      errorMessage: "사용자가 존재하지 않거나, 이메일 또는 패스워드가 틀렸습니다."
+      errorMessage: "이메일 또는 패스워드가 틀렸습니다.",
     });
     return;
   }
 
-  //사용자가 일치하는 경우 토큰을 만들어 준다
   res.send({
     token: jwt.sign({ userId: user.userId }, "sparta-secret-key"),
   });
